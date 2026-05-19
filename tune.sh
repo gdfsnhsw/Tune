@@ -662,90 +662,6 @@ kernel_settings_() {
 	fi
 	
 	cat << EOF > /etc/sysctl.conf
-#### Network Security Settings
-# Turn on Source Address Verification in all interfaces to prevent some spoofing attacks
-net.ipv4.conf.default.rp_filter=1
-net.ipv4.conf.all.rp_filter=1
-
-# Protect a server against SYN flood attacks
-#Enable TCP/IP SYN cookies to 
-net.ipv4.tcp_syncookies=1
-#Increase the maximum queue length of completely established sockets waiting to be accepted
-# The net.core.somaxconn parameter is the maximum queue length of completely established sockets waiting to be accepted.
-net.core.somaxconn=10000
-#Increase the maximum queue length of incomplete sockets i.e. half-open connection
-# The net.ipv4.tcp_max_syn_backlog parameter is the maximum queue length of incomplete sockets.
-# NOTE: THis value should not be above "net.core.somaxconn", since that is also a hard open limit of maximum queue length of incomplete sockets/
-# Kernel will take the lower one out of two as the maximum queue length of incomplete sockets
-net.ipv4.tcp_max_syn_backlog=10000
-#Increase the maximal number of TCP sockets not attached to any user file handle (i.e. orphaned connections), held by system.
-# NOTE: each orphan eats up to ~64K of unswappable memory
-# The net.ipv4.tcp_max_orphans parameter is the maximum number of TCP sockets not attached to any user file handle.
-net.ipv4.tcp_max_orphans=10000
-#Quickly Discard locally closed TCP connection
-net.ipv4.tcp_orphan_retries = 2
-
-# Protect a server against ack loop" DoS attacks
-net.ipv4.tcp_invalid_ratelimit=500
-
-# Disable packet forwarding
-net.ipv4.ip_forward=0
-net.ipv6.conf.all.forwarding=0
-
-# Do not accept ICMP redirects (prevent MITM attacks)
-net.ipv4.conf.all.accept_redirects = 0
-net.ipv6.conf.all.accept_redirects = 0
-
-# Do not send ICMP redirects (we are not a router)
-net.ipv4.conf.all.send_redirects = 0
-
-# Do not accept IP source route packets (we are not a router)
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv6.conf.all.accept_source_route = 0
-
-# Log Martian Packets
-net.ipv4.conf.all.log_martians = 1
-
-# Protect Against TCP TIME-WAIT Assassination
-net.ipv4.tcp_rfc1337 = 0
-
-
-### SoftIRQ Misses
-# SoftIRQs are used for tasks that are not time-critical, such as network packet processing.
-# Check the number of softIRQ misses
-# cat /proc/net/softnet_stat
-# Pay close attention to the following columns:
-# Column-01: packet_process: Packet processed by each CPU.
-# Column-02: packet_drop: Packets dropped.
-# Column-03: time_squeeze: net_rx_action.
-
-# Column-02: packet_drop: Packets dropped.
-# Packet_drop indicates that the NIC is dropping packets due to a lack of backlog space.
-# Solution 1. : Increase the size of the NIC’s backlog
-# The backlog is the number of packets that the NIC can store in its backlog queue.
-# Increase the backlog size to 10000
-net.core.netdev_max_backlog=10000
-
-# Column-03: time_squeeze: net_rx_action
-# Time_squeeze: net_rx_action counter indicates the number of times the CPU has to return prematurely without draining the queue.
-# This is most likely weak causing by weak CPU in a high-traffic environment.
-# Solution 2. : Increasing net.core.netdev_budget and net.core.netdev_budget_usecs
-# The netdev_budget parameter is the maximum number of packets that the kernel will process in a single softIRQ.
-# The netdev_budget_usecs parameter is the maximum amount of time that the kernel will spend processing packets in a single softIRQ.
-# To increase the netdev_budget and netdev_budget_usecs values, you can use the sysctl command.
-net.core.netdev_budget=50000
-net.core.netdev_budget_usecs=8000
-# NOTE: Setting a high number might cause CPU to stall and end in poor overall performance
-# NOTE: Increasing the number of Query Channels (RSS) can also help with the issue.
-
-# Low latency busy poll timeout for socket reads
-# NOTE: Not supported by most NIC
-#net.core.busy_read=50
-# Low latency busy poll timeout for poll and select
-# NOTE: Not supported by most NIC
-#net.core.busy_poll=50
-
-
 ### Socket buffer size
 #Congestion window
 # The congestion window is the amount of data that the sender can send before it must wait for an acknowledgment from the receiver.
@@ -828,90 +744,11 @@ net.ipv4.tcp_window_scaling = 1
 net.ipv4.tcp_workaround_signed_windows = 1
 
 
-### MTU Discovery
-# Allow Path MTU Discovery
-net.ipv4.ip_no_pmtu_disc = 0
-
-# Enable TCP Packetization-Layer Path, and use initial MSS of tcp_base_mss
-net.ipv4.tcp_mtu_probing = 2
-
-# Starting MSS used in Path MTU discovery
-net.ipv4.tcp_base_mss = 1460
-
-#  Minimum MSS used in connection, cap it to this value even if advertised ADVMSS option is even lower
-net.ipv4.tcp_min_snd_mss = 536
-
-# Maximum memory used to reassemble IP fragments
-net.ipv4.ipfrag_high_thresh = 8388608
-
-
-### Account for a high RTT lossy network
-# Enable selective acknowledgments 
-net.ipv4.tcp_sack = 1
-
-# Allows TCP to send "duplicate" SACKs
-net.ipv4.tcp_dsack = 1
-
 # Enable Early Retransmit. ER lowers the threshold for triggering fast retransmit when the amount of outstanding data is small and when no previously unsent data can be transmitted
 net.ipv4.tcp_early_retrans = 3
 
 # Disable ECN to survive in a congested network
 net.ipv4.tcp_ecn = 0
-
-# Reordering level of packets in a TCP stream
-# Initial reordering level of packets in a TCP stream. TCP stack can then dynamically adjust flow reordering level between this initial value and tcp_max_reordering
-net.ipv4.tcp_reordering = 10
-# Maximal reordering level of packets in a TCP stream
-net.ipv4.tcp_max_reordering = 1000
-# NOTE: An attempt to reduce the number of retransmissions due to packet reordering in a network. Which is common in a lossy network
-
-# Enable F-RTO (Forward RTO-Recovery). Beneficial in networks where the RTT fluctuates 
-net.ipv4.tcp_frto = 2
-
-# Enable TCP Auto Corking
-# When enabled, the TCP stack will automatically cork the socket when the application is not sending data fast enough
-net.ipv4.tcp_autocorking = 1
-
-# TCP Retry
-# The number of times to retry before killing an alive TCP connection
-net.ipv4.tcp_retries1 = 5
-net.ipv4.tcp_retries2 = 20
-
-# TCP Keepalive
-# After $tcp_keepalive_time seconds of inactivity, TCP will send a keepalive probe every $tcp_keepalive_intvl to the other end. /
-# After $tcp_keepalive_probes failed attempts, the connection will be closed
-# In seconds, time default value for connections to keep alive
-net.ipv4.tcp_keepalive_time = 7200
-# In seconds, how frequently the probes are send out
-net.ipv4.tcp_keepalive_intvl = 120
-# How many keepalive probes TCP sends out, until it decides that the connection is broken
-net.ipv4.tcp_keepalive_probes = 15
-
-# SYN 
-# Number of times SYNACKs for a passive TCP connection attempt will be retransmitted
-net.ipv4.tcp_synack_retries = 10
-# Number of times initial SYNs for an active TCP connection attempt	will be retransmitted
-net.ipv4.tcp_syn_retries = 7
-
-
-### To support more connections
-#Solution 1. : Increase the maximum number of file descriptors
-# The maximum number of connections that a server can handle is determined by the maximum number of file descriptors that the server can open.
-#fs.file-max=655360
-#fs.nr_open=655360
-
-#Solution 2. : Increase the number of port that the kernel can allocate for outgoing connections
-# The net.ipv4.ip_local_port_range parameter is the range of port numbers that the kernel can allocate for outgoing connections.
-net.ipv4.ip_local_port_range=1024 65535
-
-#Solution 3. : Increase the maximum number of sockets in TIME_WAIT state
-# The net.ipv4.tcp_max_tw_buckets parameter is the maximum number of sockets in TIME_WAIT state.
-net.ipv4.tcp_max_tw_buckets=10000
-
-#Solution 4. : Quickly discard sockets in the state FIN-WAIT-2
-# The net.ipv4.tcp_fin_timeout parameter is the maximum time that a connection in the FIN-WAIT-2 state will stay open.
-net.ipv4.tcp_fin_timeout=10
-
 
 ### Miscellaneous
 # Enable TCP Fast Open
@@ -921,19 +758,6 @@ net.ipv4.tcp_fastopen_blackhole_timeout_sec = 0
 
 # The maximum amount of unsent bytes in TCP socket write queue, this is on top of the congestion window
 net.ipv4.tcp_notsent_lowat = 131072
-
-# Avoid falling back to slow start after a connection goes idle
-net.ipv4.tcp_slow_start_after_idle = 0
-
-# Disable timestamps
-net.ipv4.tcp_timestamps = 0
-
-# Save cache metrics on closing connections
-net.ipv4.tcp_no_metrics_save = 0
-
-## ARP table settings
-# The maximum number of bytes which may be used by packets queued for each unresolved address by other network layers
-net.ipv4.neigh.default.unres_qlen_bytes = 16777216
 
 # Controls a per TCP socket cache of one socket buffer
 # net.ipv4.tcp_rx_skb_cache=1
