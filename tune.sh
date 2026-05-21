@@ -608,7 +608,6 @@ set_initial_congestion_window_() {
 kernel_settings_() {
 	# Set variables based on memory size
 	if [ $mem_size -le 128 ]; then	# 128MB or less
-		adv_win_scale=3
 		rmem_default=262144
 		rmem_max=16777216
 		tcp_rmem="8192 $rmem_default $rmem_max"
@@ -621,7 +620,6 @@ kernel_settings_() {
 		expire_centisecs=100
 		swappiness=80
 	elif [ $mem_size -le 512 ]; then	# 512MB or less
-		adv_win_scale=2
 		rmem_default=262144
 		rmem_max=16777216
 		tcp_rmem="8192 $rmem_default $rmem_max"
@@ -634,7 +632,6 @@ kernel_settings_() {
 		expire_centisecs=500
 		swappiness=60
 	elif [ $mem_size -le 1024 ]; then	# 1GB or less
-		adv_win_scale=1
 		rmem_default=262144
 		rmem_max=33554432
 		tcp_rmem="8192 $rmem_default $rmem_max"
@@ -647,7 +644,6 @@ kernel_settings_() {
 		expire_centisecs=1000
 		swappiness=20
 	else	# 1GB or more
-		adv_win_scale=1
 		rmem_default=262144
 		rmem_max=33554432
 		tcp_rmem="8192 $rmem_default $rmem_max"
@@ -662,128 +658,34 @@ kernel_settings_() {
 	fi
 	
 	cat << EOF > /etc/sysctl.conf
-### Socket buffer size
-#Congestion window
-# The congestion window is the amount of data that the sender can send before it must wait for an acknowledgment from the receiver.
-# The congestion window is limited by 2 things. 
-#   The receiver’s advertised window size, which is the amount of data that the receiver is willing to accept
-#   And also the size of the sending socket buffer on the sender’s end.
-
-#How to determine the optimal congestion window
-# The optimal congestion window size is determined by the bandwidth-delay product (BDP) of the network.
-# The BDP is the amount of data that can be in transit in the network at any given time.
-# It is calculated by multiplying the bandwidth of the network by the round-trip time (RTT) of the network.
-# The optimal congestion window size is the BDP of the network.
-# You can use this site to calculate the BDP of your network: https://www.speedguide.net/bdp.php
-
-#How to determine the Optimal Receive socket Buffer Size
-# The optimal socket buffer size is determined by optimal congestion window and, in turn, also determined by the bandwidth-delay product (BDP) of the network.
-# We have to make sure the advertised window size is not smaller than BDP to prevent underutilization of the network.
-# The receive socket buffer space is shared between the application and kernel. /
-#   TCP maintains part of the buffer as the TCP window, this is the size of the receive window advertised to the other end.  /
-#   The rest of the space is used as the "application" buffer, used to isolate the network from scheduling and application latencies.
-# The total receive socket buffer space is determined by net.ipv4.tcp_rmem and the portion of which is allocated as "application" buffer is determined by net.ipv4.tcp_adv_win_scale.
-net.ipv4.tcp_adv_win_scale=$adv_win_scale
 net.core.rmem_default=$rmem_default
 net.core.rmem_max=$rmem_max
 net.ipv4.tcp_rmem=$tcp_rmem
 
-#How to determine the Optimal Send socket Buffer Size
-# Send socket buffer size determine the maximum amount of data that the application can send before needing to wait for an acknowledgment (ACK) from the receiver
-# As you may have recalled, it is bascially the definition of congestion window
-# Therefore it is important to make sure the send buffer space is not smaller than BDP to prevent underutilization of the network.
-
-# You can set send socket buffer size using the sysctl command.
 net.core.wmem_default=$wmem_default
 net.core.wmem_max=$wmem_max
 net.ipv4.tcp_wmem=$tcp_wmem
 
-#Relationship between net.core.r/wmem and net.ipv4.tcp_r/wmem
-# net.core.r/wmem is the default buffer size for all protocols, including TCP
-# And net.ipv4.tcp_r/wmem is the buffer size for TCP only
+net.ipv4.udp_rmem_min=8192
+net.ipv4.udp_mem=$tcp_wmem
 
-#net.ipv4.tcp_rmem = tcp_rmem_min tcp_rmem_default tcp_rmem_max
-# Vector of 3 INTEGERs: min, default, max
-#	min: Minimal size of receive buffer used by TCP sockets.
-#	It is guaranteed to each TCP socket, even under moderate memory
-#	pressure.
-#
-#	default: initial size of receive buffer used by TCP sockets.
-#	This value overrides net.core.rmem_default used by other protocols.
-#
-#	max: maximal size of receive buffer allowed for automatically
-#	selected receiver buffers for TCP socket. This value does not override
-#	net.core.rmem_max.  Calling setsockopt() with SO_RCVBUF disables
-#	automatic tuning of that socket's receive buffer size, in which
-#	case this value is ignored.
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_slow_start_after_idle = 0
 
-#net.ipv4.tcp_wmem = tcp_wmem_min tcp_wmem_default tcp_wmem_max
-# Vector of 3 INTEGERs: min, default, max
-#	min: Amount of memory reserved for send buffers for TCP sockets.
-#	Each TCP socket has rights to use it due to fact of its birth.
-#
-#	default: initial size of send buffer used by TCP sockets.  This
-#	value overrides net.core.wmem_default used by other protocols.
-#	It is usually lower than net.core.wmem_default.
-#
-#	max: Maximal amount of memory allowed for automatically tuned
-#	send buffers for TCP sockets. This value does not override
-#	net.core.wmem_max.  Calling setsockopt() with SO_SNDBUF disables
-#	automatic tuning of that socket's send buffer size, in which case
-#	this value is ignored.
-
-# Because of the varying internet condition, not every connection is going to reach the optimal congestion window size, and that’s okay.
-# To prevent slow link from using more than necessary amount of memory, we can use the following sysctl settings to enable receive buffer auto-tuning
-net.ipv4.tcp_moderate_rcvbuf = 1
-
-
-# Allows the use of a large window (> 64 kB) on a TCP connection, this is the default settings for most modern kernel
-net.ipv4.tcp_window_scaling = 1
-
-# Set maximum window size to MAX_TCP_WINDOW i.e. 32767 in times there is no received window scaling option
-net.ipv4.tcp_workaround_signed_windows = 1
-
-
-# Enable Early Retransmit. ER lowers the threshold for triggering fast retransmit when the amount of outstanding data is small and when no previously unsent data can be transmitted
 net.ipv4.tcp_early_retrans = 3
-
-# Disable ECN to survive in a congested network
 net.ipv4.tcp_ecn = 0
 
-### Miscellaneous
-# Enable TCP Fast Open
-# TCP Fast Open (TFO) is an extension to speed up the opening of successive TCP connections between two endpoints
 net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_fastopen_blackhole_timeout_sec = 0
 
-# The maximum amount of unsent bytes in TCP socket write queue, this is on top of the congestion window
 net.ipv4.tcp_notsent_lowat = 131072
 
-# Controls a per TCP socket cache of one socket buffer
-# net.ipv4.tcp_rx_skb_cache=1
-
-
-### Buffer and cache management
-# Percentage of total system memory that can be filled with dirty pages /
-# before the system starts writing them to disk in the background
 vm.dirty_background_ratio = $background_ratio
-# Percentage of total system memory that can be filled with dirty pages 
-# before the system blocks any further writes /
-# and forces the process that is generating dirty pages to write them to disk.
 vm.dirty_ratio = $dirty_ratio
-
-# The interval of when writes of dirty in-memory data are written out to disk. 
-# It is expressed in centiseconds
 vm.dirty_writeback_centisecs = $writeback_centisecs
-# when dirty in-memory data is old enough to be eligible for writeout by the kernel flusher threads. 
-# It is also expressed in centiseconds. 
 vm.dirty_expire_centisecs = $expire_centisecs
-
-# Avoid using swap as much as possible
 vm.swappiness = $swappiness
 
-
-### Congestion Control
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 EOF
